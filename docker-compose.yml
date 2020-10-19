@@ -1,0 +1,47 @@
+version: '3'
+
+services:
+  redis:
+    image: redis
+    container_name: redis
+    command: ["redis-server", "--port", "6379", "--appendonly", "yes","--maxmemory", "1gb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+        - "6379:6379"
+    volumes:
+      - .:/redis.conf
+
+  celery-worker:
+      build: .
+      container_name: celery-worker
+      entrypoint: celery
+      command: -A youtube_search worker --loglevel=info
+      volumes:
+        - .:/var/www/app/worker
+      links:
+        - redis
+      depends_on:
+        - redis
+
+
+  celery-beat:
+    build: .
+    container_name: celery-beat
+    entrypoint: celery
+    command: -A youtube_search beat --loglevel=info
+    volumes:
+      - .:/var/www/app/beat
+    links:
+      - celery-worker
+      - redis
+    depends_on:
+      - celery-worker
+      - redis
+
+  web:
+    build: .
+    command: bash -c "python manage.py makemigrations && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    container_name: youtube_search
+    volumes:
+      - .:/youtube_search
+    ports:
+      - "8000:8000"
